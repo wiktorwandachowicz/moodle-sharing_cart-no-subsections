@@ -105,6 +105,12 @@ class asynchronous_backup_task extends \core\task\adhoc_task
                 $this->output('Bad backup controller status, invalid controller, ending backup execution.');
                 return;
             }
+            // Temporary fix to spot subsection backup and abort it to avoid endless loop and OOM problems.
+            $customdata = $this->get_custom_data();
+            if ($this->backuping_subsection($customdata->item)) {
+                mtrace('Cannot backup subsection. Subsections are not yet supported by sharing cart. Ending backup execution.');
+                return;
+            }
 
             // Do some preflight checks on the backup.
             $status = $bc->get_status();
@@ -450,5 +456,22 @@ class asynchronous_backup_task extends \core\task\adhoc_task
     public function get_name(): string
     {
         return parent::get_name() . ' (block_sharing_cart)';
+    }
+
+    /**
+     * Checks whether we are currently backuping subsection.
+     *
+     * @param stdClass $item
+     * @see https://github.com/donhinkelman/moodle-block_sharing_cart/issues/257
+     *
+     * @return bool
+     */
+    private function backuping_subsection(\stdClass $item) {
+        global $DB;
+        if ($item->type != 'section') {
+            return false;
+        }
+        $component = $DB->get_field('course_sections', 'component', ['id' => $item->old_instance_id]);
+        return $component == 'mod_subsection';
     }
 }
